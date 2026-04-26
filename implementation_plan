@@ -1,0 +1,116 @@
+# Improving Revenue/COGS Prediction Model
+
+## Root Cause Analysis
+
+The current model achieves **R²≈0.76** and **RMSE≈1M** for Revenue. Here's why:
+
+### 1. Massive Structural Break in the Data
+
+Revenue **dropped ~45%** from 2018→2019 and never recovered:
+
+| Period | Revenue Mean | Order Count |
+|--------|------------|-------------|
+| 2012–2018 (growth) | ~5.0M/day | ~175–225/day |
+| 2019–2022 (decline) | ~3.0M/day | ~95–115/day |
+
+The model is trying to fit **two completely different regimes** with the same features. XGBoost trained on 2012–2021 data predicts values in the 4–5M range for 2022, when actual values are ~3.2M.
+
+### 2. Extreme Multicollinearity
+
+The top 20 features are all 0.99+ correlated with each other:
+- `unique_customers_lag_1d ↔ order_count_lag_1d`: **0.9999**
+- `unique_zips_lag_1d ↔ unique_customers_lag_1d`: **0.9997**
+- `order_count_lag_1d ↔ orders_status_delivered_lag_1d`: **0.9982**
+
+Having 60 `_lag_1d` features that are near-duplicates of each other adds noise without information gain.
+
+### 3. Calendar/Promo Features Are Weak
+
+| Feature Group | # Features | Avg \|corr\| with Revenue |
+|--------------|-----------|--------------------------|
+| lag_1d | 60 | 0.60 |
+| rolling_mean | 5 | 0.59 |
+| lag_365d | 1 | 0.66 |
+| **calendar** | **7** | **0.12** |
+| **promo** | **11** | **0.09** |
+
+Calendar and promo features (18 total) contribute almost nothing — low signal, high noise ratio.
+
+### 4. Negative Trend Not Captured
+
+`year_trend` has a **-0.28 correlation** with Revenue — it goes 0→10 linearly, but revenue goes up 2012–2016, then down 2016–2022. A linear trend can't model this inverted-U pattern.
+
+---
+
+## Proposed Changes
+
+### A. Feature Engineering Fixes
+
+#### 1. Remove highly redundant features
+Keep only the **representative** feature from each correlated cluster (threshold > 0.95):
+- **Keep**: `order_count_lag_1d`, `total_payment_value_lag_1d`, `revenue_lag_1d`, `COGS_lag_1d`
+- **Drop**: ~40 redundant `_lag_1d` breakdown features (by region, device, source, payment, status, category, segment)
+
+#### 2. Add proper trend features
+Replace linear `year_trend` with:
+- **Piecewise trend**: separate slopes for growth (2012–2016) and decline (2017–2022) periods
+- **Exponential moving average of yearly revenue** (captures regime shifts)
+- **Ratio features**: `revenue_lag_1d / revenue_rmean_30d` (deviation from recent norm)
+
+#### 3. Add missing features
+- **Day-of-week × month interaction** (captures weekly seasonality that varies by season)
+- **Revenue momentum**: `revenue_rmean_7d / revenue_rmean_30d` (short vs long trend)
+- **Log-transformed targets**: Revenue/COGS are right-skewed; log transform can stabilize variance and improve R²
+
+#### 4. Drop useless features
+Remove features with |corr| < 0.05: `avg_rating_lag_1d`, `avg_delivery_days_lag_1d`, `avg_session_duration_sec_lag_1d`, `avg_installments_lag_1d`, `promo_channel_email/online/social_media`
+
+### B. Training Strategy Fixes
+
+#### 5. Recency weighting / Trim old data
+Option A: **Only train on 2017–2022** data (post-structural-break, same regime as prediction target)
+Option B: Use `sample_weight` to **weight recent years higher** (e.g., 2022=1.0, 2021=0.8, ..., 2012=0.1)
+
+#### 6. Re-enable early stopping with proper params
+```python
+best_params = {
+    "n_estimators": 3000,
+    "learning_rate": 0.02,
+    "max_depth": 6,
+    "subsample": 0.8,
+    "colsample_bytree": 0.7,
+    "min_child_weight": 10,
+    "gamma": 0.1,
+    "reg_alpha": 0.5,
+    "reg_lambda": 2.0,
+    "early_stopping_rounds": 100,
+}
+```
+
+#### 7. Log-transform target
+Train on `log(Revenue)` instead of raw Revenue to reduce heteroscedasticity (variance increases with revenue level).
+
+### C. Validation Fix
+
+#### 8. Use 2021–2022 for validation (not just 2022)
+With the structural break, validating on the most recent 2 years gives a more realistic estimate of test performance.
+
+---
+
+## Expected Impact
+
+| Change | Expected R² improvement |
+|--------|----------------------|
+| Trim to 2017+ or recency weight | +0.05–0.10 (biggest single gain) |
+| Remove redundant features | +0.01–0.03 |
+| Log-transform target | +0.02–0.05 |
+| Add ratio/momentum features | +0.01–0.03 |
+| Better hyperparams + early stopping | +0.01–0.02 |
+| **Combined** | **R² ≈ 0.88–0.93** |
+
+## Open Questions
+
+> [!IMPORTANT]
+> 1. What's the target prediction period? Currently set to 2023-01-01 → 2024-07-01 — is this correct?
+> 2. Should we prioritize Revenue accuracy over COGS, or are both equally important?
+> 3. Is there an expected range for 2023/2024 Revenue? (Helps validate if predictions are reasonable)
