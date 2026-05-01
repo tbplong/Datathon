@@ -6,7 +6,7 @@ This repository contains the feature engineering and XGBoost training code used 
 
 - `data/` - input feature tables and generated outputs.
   - `revenue_features_full.csv` - main training table used by the final pipeline.
-  - `revenue_features_v3_eng.csv` - engineered training table written by `src/train_v3.py`.
+  - `revenue_features_eng.csv` - engineered training table written by `src/train.py`.
   - `submission.csv` - final forecast file written by the training script.
   - `feature_importance_revenue.csv` and `feature_importance_cogs.csv` - XGBoost feature importance exports.
   - `shap_importance_revenue.csv` and `shap_importance_cogs.csv` - SHAP-based feature importance exports.
@@ -14,8 +14,7 @@ This repository contains the feature engineering and XGBoost training code used 
   - `shap_summary_revenue.png`, `shap_bar_revenue.png` - SHAP visualization plots.
   - `shap_summary_cogs.png`, `shap_bar_cogs.png` - SHAP visualization plots.
 - `src/` - model training and analysis scripts.
-  - `train_v3.py` - canonical reproducible final submission pipeline with Optuna tuning, SHAP analysis, and time-series CV.
-  - `train.py`, `train_v2.py`, `train_v4.py` - earlier or alternative model variants kept for reference.
+  - `train.py` - canonical reproducible final submission pipeline with Optuna tuning, SHAP analysis, and time-series CV.
   - `diagnose.py` - data sanity checks and correlation inspection.
   - `baseline.ipynb` - exploratory notebook.
 - `docs/` - project notes and supporting material.
@@ -48,7 +47,7 @@ python src/train_v3.py
 ```
 
 4. Review the generated files in `data/`:
-   - `revenue_features_v3_eng.csv` - engineered dataset
+   - `revenue_features_eng.csv` - engineered dataset
    - `feature_importance_revenue.csv` - XGBoost importance scores
    - `feature_importance_cogs.csv` - XGBoost importance scores
    - `shap_importance_revenue.csv` - SHAP-based importance
@@ -59,9 +58,9 @@ python src/train_v3.py
    - `shap_summary_cogs.png`, `shap_bar_cogs.png` - SHAP plots
    - `submission.csv` - final forecast predictions
 
-## What `train_v3.py` Does
+## What `train.py` Does
 
-`src/train_v3.py` performs the following steps in a clear, reproducible pipeline:
+`src/train.py` performs the following steps in a clear, reproducible pipeline:
 
 1. **Load data**: Loads `data/revenue_features_full.csv`.
 2. **Feature engineering**: Adds calendar, lag, rolling, momentum, and ratio features.
@@ -89,6 +88,6 @@ The pipeline provides comprehensive model explainability:
 ## Notes
 
 - The script assumes the raw feature table in `data/revenue_features_full.csv` is present.
-- If you change the input data, rerun `src/train_v3.py` to regenerate the engineered table, importance scores, and submission.
+- If you change the input data, rerun `src/train.py` to regenerate the engineered table, importance scores, and submission.
 - The Optuna search uses a seeded RNG for reproducibility across runs.
 - SHAP computation can be memory-intensive for large datasets; plots are saved as PNG files for easy review.
