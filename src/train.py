@@ -70,25 +70,25 @@ BREAKDOWN_PREFIXES = (
     "promo_channel_",
     "max_discount_value",
 )
-PRUNE_SET = {
-    "items_reorder",
-    "unique_sizes",
-    "promo_type_fixed",
-    "is_weekend",
-    "refund_amount_lag_1d",
-    "cogs_momentum_7_14",
-    "cogs_lag_14d",
-    "cogs_lag_3d",
-    "revenue_diff_1d_30d",
-    "revenue_momentum_7_14",
-    "cogs_rmean_7d",
-    "items_stockout",
-    "dow_sin",
-    "return_quantity_lag_1d",
-    "cogs_rmean_14d",
-    "revenue_diff_1d_7d",
-    "revenue_lag_30d",
-}
+# PRUNE_SET = {
+#     "items_reorder",
+#     "unique_sizes",
+#     "promo_type_fixed",
+#     "is_weekend",
+#     "refund_amount_lag_1d",
+#     "cogs_momentum_7_14",
+#     "cogs_lag_14d",
+#     "cogs_lag_3d",
+#     "revenue_diff_1d_30d",
+#     "revenue_momentum_7_14",
+#     "cogs_rmean_7d",
+#     "items_stockout",
+#     "dow_sin",
+#     "return_quantity_lag_1d",
+#     "cogs_rmean_14d",
+#     "revenue_diff_1d_7d",
+#     "revenue_lag_30d",
+# }
 MODEL_PARAMS = {
     "n_estimators": 5000,
     "objective": "reg:squarederror",
@@ -199,20 +199,20 @@ def select_feature_columns(df: pd.DataFrame) -> list[str]:
     excluded = set(BASE_EXCLUSIONS) | RAW_SAME_DAY | set(same_day_breakdowns)
     feature_cols = [column for column in df.columns if column not in excluded]
 
-    correlation_revenue = df[feature_cols].corrwith(df["Revenue"]).abs()
-    correlation_cogs = df[feature_cols].corrwith(df["COGS"]).abs()
-    max_correlation = pd.concat([correlation_revenue, correlation_cogs], axis=1).max(axis=1)
-    weak_features = max_correlation[max_correlation < 0.05].index.tolist()
-    feature_cols = [column for column in feature_cols if column not in weak_features]
+    # correlation_revenue = df[feature_cols].corrwith(df["Revenue"]).abs()
+    # correlation_cogs = df[feature_cols].corrwith(df["COGS"]).abs()
+    # max_correlation = pd.concat([correlation_revenue, correlation_cogs], axis=1).max(axis=1)
+    # weak_features = max_correlation[max_correlation < 0.05].index.tolist()
+    # feature_cols = [column for column in feature_cols if column not in weak_features]
 
-    pruned_features = [column for column in feature_cols if column in PRUNE_SET]
-    feature_cols = [column for column in feature_cols if column not in PRUNE_SET]
+    # pruned_features = [column for column in feature_cols if column in PRUNE_SET]
+    # feature_cols = [column for column in feature_cols if column not in PRUNE_SET]
 
     print(f"  Features kept: {len(feature_cols)}")
-    print(f"  Dropped weak-correlation features: {len(weak_features)}")
-    print(f"  Dropped manual prune features: {len(pruned_features)}")
-    if pruned_features:
-        print(f"    Removed: {pruned_features}")
+    # print(f"  Dropped weak-correlation features: {len(weak_features)}")
+    # print(f"  Dropped manual prune features: {len(pruned_features)}")
+    # if pruned_features:
+    #     print(f"    Removed: {pruned_features}")
 
     return feature_cols
 
