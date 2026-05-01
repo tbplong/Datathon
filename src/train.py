@@ -24,8 +24,8 @@ SEED = 42
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 SOURCE_PATH = DATA_DIR / "revenue_features_full.csv"
-ENGINEERED_PATH = DATA_DIR / "revenue_features_eng.csv"
-SUBMISSION_PATH = ROOT/"submission" / "submission.csv"
+ENGINEERED_PATH = DATA_DIR / "revenue_features_v3_eng.csv"
+SUBMISSION_PATH = DATA_DIR / "submission.csv"
 TEST_START = "2023-01-01"
 TEST_END = "2024-07-01"
 TARGETS = ["Revenue", "COGS"]
@@ -255,20 +255,28 @@ def optimize_hyperparameters(
         
         tscv = TimeSeriesSplit(n_splits=3)
         scores: list[float] = []
-        
+
         for target in TARGETS:
+            # allow using the other target's lag as an explicit feature
+            other_target = [t for t in TARGETS if t != target][0]
+            other_key = other_target.lower()
+            per_target_features = feature_cols.copy()
+            candidate = f"{other_key}_lag_1d"
+            if candidate in df.columns and candidate not in per_target_features:
+                per_target_features.append(candidate)
+
             y_raw = df[target]
             y_log = pd.Series(np.log1p(y_raw.values), index=y_raw.index)
-            for train_idx, val_idx in tscv.split(df[feature_cols]):
+            for train_idx, val_idx in tscv.split(df[per_target_features]):
                 model = XGBRegressor(**params)
                 model.fit(
-                    df[feature_cols].iloc[train_idx],
+                    df[per_target_features].iloc[train_idx],
                     y_log.iloc[train_idx],
-                    eval_set=[(df[feature_cols].iloc[val_idx], y_log.iloc[val_idx])],
+                    eval_set=[(df[per_target_features].iloc[val_idx], y_log.iloc[val_idx])],
                     sample_weight=sample_weights[train_idx],
                     verbose=False,
                 )
-                preds = inv_t(model.predict(df[feature_cols].iloc[val_idx]))
+                preds = inv_t(model.predict(df[per_target_features].iloc[val_idx]))
                 rmse = np.sqrt(mean_squared_error(df[target].iloc[val_idx], preds))
                 scores.append(float(rmse))
         
@@ -314,23 +322,31 @@ def evaluate_time_series_cv(
 
     tscv = TimeSeriesSplit(n_splits=5)
     for target in TARGETS:
+        # include other-target lag feature when evaluating this target
+        other_target = [t for t in TARGETS if t != target][0]
+        other_key = other_target.lower()
+        model_features = feature_cols.copy()
+        candidate = f"{other_key}_lag_1d"
+        if candidate in df.columns and candidate not in model_features:
+            model_features.append(candidate)
+
         y_raw = df[target]
         y_log = pd.Series(np.log1p(y_raw.values), index=y_raw.index)
         rmses: list[float] = []
         maes: list[float] = []
         r2s: list[float] = []
 
-        for fold, (train_idx, val_idx) in enumerate(tscv.split(df[feature_cols])):
+        for fold, (train_idx, val_idx) in enumerate(tscv.split(df[model_features])):
             model = XGBRegressor(**params)
             model.fit(
-                df[feature_cols].iloc[train_idx],
+                df[model_features].iloc[train_idx],
                 y_log.iloc[train_idx],
-                eval_set=[(df[feature_cols].iloc[val_idx], y_log.iloc[val_idx])],
+                eval_set=[(df[model_features].iloc[val_idx], y_log.iloc[val_idx])],
                 sample_weight=sample_weights[train_idx],
                 verbose=False,
             )
 
-            predictions = np.maximum(inv_t(model.predict(df[feature_cols].iloc[val_idx])), 0)
+            predictions = np.maximum(inv_t(model.predict(df[model_features].iloc[val_idx])), 0)
             actual = y_raw.iloc[val_idx]
             rmse = np.sqrt(mean_squared_error(actual, predictions))
             mae = mean_absolute_error(actual, predictions)
@@ -359,15 +375,23 @@ def train_final_models(
     final_params = {k: v for k, v in params.items() if k != "early_stopping_rounds"}
     models: dict[str, XGBRegressor] = {}
     for target in TARGETS:
+        # include the other target's lag feature when training final model
+        other_target = [t for t in TARGETS if t != target][0]
+        other_key = other_target.lower()
+        final_features = feature_cols.copy()
+        candidate = f"{other_key}_lag_1d"
+        if candidate in df.columns and candidate not in final_features:
+            final_features.append(candidate)
+
         model = XGBRegressor(**final_params)
         model.fit(
-            df[feature_cols],
+            df[final_features],
             log_t(df[target]),
             sample_weight=sample_weights,
             verbose=False,
         )
         models[target] = model
-        print(f"  {target}: trained")
+        print(f"  {target}: trained with {len(final_features)} features")
 
     return models
 
@@ -386,12 +410,19 @@ def compute_feature_importance_and_shap(
         model = models[target]
         target_key = target.lower()
         print(f"\n  [{target}] Computing feature importance and SHAP values...")
+        # Determine the feature set used for this model (may include other-target lag)
+        other_target = [t for t in TARGETS if t != target][0]
+        other_key = other_target.lower()
+        model_feature_cols = feature_cols.copy()
+        candidate = f"{other_key}_lag_1d"
+        if candidate in df.columns and candidate not in model_feature_cols:
+            model_feature_cols.append(candidate)
 
         # XGBoost built-in importance
-        importance_data: dict[str, list] = {"feature": feature_cols}
+        importance_data: dict[str, list] = {"feature": model_feature_cols}
         for importance_type in ["weight", "gain", "cover"]:
             booster_scores = model.get_booster().get_score(importance_type=importance_type)
-            importance_data[importance_type] = [booster_scores.get(feature, 0.0) for feature in feature_cols]
+            importance_data[importance_type] = [booster_scores.get(feature, 0.0) for feature in model_feature_cols]
 
         importance_df = pd.DataFrame(importance_data).sort_values("gain", ascending=False).reset_index(drop=True)
         importance_path = DATA_DIR / f"feature_importance_{target_key}.csv"
@@ -403,11 +434,13 @@ def compute_feature_importance_and_shap(
         # SHAP values
         print(f"    Computing SHAP values...")
         explainer = shap.TreeExplainer(model)
-        shap_values = explainer.shap_values(X_all)
+        # use the same feature matrix layout as used for training the model
+        X_all_target = df[model_feature_cols]
+        shap_values = explainer.shap_values(X_all_target)
 
         mean_abs_shap = np.abs(shap_values).mean(axis=0)
         shap_df = pd.DataFrame({
-            "feature": feature_cols,
+            "feature": model_feature_cols,
             "mean_abs_shap": mean_abs_shap,
         }).sort_values("mean_abs_shap", ascending=False).reset_index(drop=True)
         
@@ -419,7 +452,7 @@ def compute_feature_importance_and_shap(
 
         # SHAP summary plot (beeswarm)
         plt.figure(figsize=(12, 10))
-        shap.summary_plot(shap_values, X_all, feature_names=feature_cols, max_display=30, show=False)
+        shap.summary_plot(shap_values, X_all_target, feature_names=model_feature_cols, max_display=30, show=False)
         plt.title(f"SHAP Summary - {target}", fontsize=14, fontweight="bold")
         plt.tight_layout()
         beeswarm_path = DATA_DIR / f"shap_summary_{target_key}.png"
@@ -429,7 +462,7 @@ def compute_feature_importance_and_shap(
 
         # SHAP bar plot (global importance)
         plt.figure(figsize=(12, 10))
-        shap.summary_plot(shap_values, X_all, feature_names=feature_cols, plot_type="bar", max_display=30, show=False)
+        shap.summary_plot(shap_values, X_all_target, feature_names=model_feature_cols, plot_type="bar", max_display=30, show=False)
         plt.title(f"SHAP Feature Importance (Bar) - {target}", fontsize=14, fontweight="bold")
         plt.tight_layout()
         bar_path = DATA_DIR / f"shap_bar_{target_key}.png"
