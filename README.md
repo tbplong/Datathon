@@ -43,7 +43,7 @@ pip install -r requirements.txt
 3. Run the final training script from the repository root:
 
 ```bash
-python src/train_v3.py
+python src/train.py
 ```
 
 4. Review the generated files in `data/`:
