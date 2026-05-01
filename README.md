@@ -3,22 +3,37 @@
 This repository contains the feature engineering and XGBoost training code used to generate the final Revenue and COGS submission.
 
 ## Repository Layout
-
-- `data/` - input feature tables and generated outputs.
-  - `revenue_features_full.csv` - main training table used by the final pipeline.
-  - `revenue_features_eng.csv` - engineered training table written by `src/train.py`.
-  - `submission.csv` - final forecast file written by the training script.
-  - `feature_importance_revenue.csv` and `feature_importance_cogs.csv` - XGBoost feature importance exports.
-  - `shap_importance_revenue.csv` and `shap_importance_cogs.csv` - SHAP-based feature importance exports.
-  - `feature_ranking_revenue.csv` and `feature_ranking_cogs.csv` - combined ranking tables.
-  - `shap_summary_revenue.png`, `shap_bar_revenue.png` - SHAP visualization plots.
-  - `shap_summary_cogs.png`, `shap_bar_cogs.png` - SHAP visualization plots.
-- `src/` - model training and analysis scripts.
-  - `train.py` - canonical reproducible final submission pipeline with Optuna tuning, SHAP analysis, and time-series CV.
-  - `diagnose.py` - data sanity checks and correlation inspection.
-  - `baseline.ipynb` - exploratory notebook.
-- `docs/` - project notes and supporting material.
-- `requirements.txt` - Python dependencies for the project.
+```
+└── 📁Datathon
+  └── 📁data: input feature tables and generated outputs.
+    ├── feature_importance_cogs.csv - XGBoost feature importance export for the COGS model.
+    ├── feature_importance_revenue.csv - XGBoost feature importance export for the Revenue model.
+    ├── feature_ranking_cogs.csv - Combined feature ranking table for the COGS model.
+    ├── feature_ranking_revenue.csv - Combined feature ranking table for the Revenue model.
+    ├── revenue_features_eng.csv - Engineered training table written by `src/train.py`.
+    ├── revenue_features_full.csv - Main training table used by the final pipeline.
+    ├── revenue_features_v3_eng.csv - Alternate engineered revenue feature table used during experimentation.
+    ├── revenue-cogs-correlation.csv - Correlation analysis between Revenue and COGS features.
+    ├── shap_bar_cogs.png - SHAP bar plot for the COGS model.
+    ├── shap_bar_revenue.png - SHAP bar plot for the Revenue model.
+    ├── shap_importance_cogs.csv - SHAP-based feature importance export for the COGS model.
+    ├── shap_importance_revenue.csv - SHAP-based feature importance export for the Revenue model.
+    ├── shap_summary_cogs.png - SHAP summary plot for the COGS model.
+    ├── shap_summary_revenue.png - SHAP summary plot for the Revenue model.
+    ├── submission.csv - Final forecast file produced by the training script.
+  └── 📁docs - project notes and supporting material.
+    ├── Đề thi Vòng 1.pdf - Original round 1 problem statement.
+  └── 📁src - model training and analysis scripts.
+    ├── baseline.ipynb - Exploratory notebook used for prototyping and analysis.
+    ├── diagnose.py - Data sanity checks and correlation inspection script.
+    ├── train.py - Canonical reproducible final submission pipeline.
+  └── 📁submission - exported submission artifacts.
+    ├── submission.csv - Copy of the final submission file for delivery.
+  ├── .DS_Store - macOS metadata file.
+  ├── implementation_plan - project implementation notes and planning artifact.
+  ├── README.md - project overview and reproduction guide.
+  └── requirements.txt - Python dependency list for the project.
+```
 
 ## Reproducibility Notes
 
